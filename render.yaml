@@ -1,0 +1,25 @@
+# Render Blueprint — New → Blueprint → pick this repo.
+# Secrets (sync: false) are prompted for during setup and never stored in git.
+services:
+  - type: web
+    name: peppes-routing
+    runtime: node
+    plan: free
+    region: frankfurt # closest Render region to Norway
+    buildCommand: npm ci && npm run build
+    startCommand: npm start # `next start` listens on Render's $PORT
+    healthCheckPath: /login # 200 even when the password gate is on
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: NEXT_PUBLIC_BASE_LOCATION
+        value: Hellinga 3
+      - key: NEXT_PUBLIC_REGION
+        value: "NO" # quoted: bare NO is a boolean in YAML

@@ -266,18 +266,29 @@ Open <http://localhost:3000>.
 
 ## Deploy & use on your phone
 
-The app is a standard Next.js project, so it deploys to [Vercel](https://vercel.com)'s
-free Hobby plan with no extra configuration.
+The app is a standard Next.js server, so it runs on any Node host. Two
+options:
+
+- **[Render](https://render.com):** the repo includes a
+  [`render.yaml`](render.yaml) blueprint. Choose *New → Blueprint*, pick this
+  repo, and paste the three secrets when prompted. The free plan sleeps after
+  15 minutes of inactivity, so the first visit after a quiet spell takes
+  about a minute to wake up. The Starter plan stays on.
+- **[Vercel](https://vercel.com):** choose *Add New → Project*, pick this
+  repo, and add the environment variables listed above. The free Hobby plan
+  doesn't sleep.
+
+Either way:
 
 1. **Turn on billing for your Google Cloud project.** The Maps, Geocoding and
-   Routes APIs won't respond until billing is enabled, even when you stay
-   within the free monthly usage. Set a budget alert to be safe.
-2. **Import the repo on Vercel.** Sign in with GitHub, choose *Add New →
-   Project*, pick this repository, and add the environment variables listed
-   above. Make sure to include `APP_PASSWORD`.
+   Routes APIs won't respond until the project is linked to a billing
+   account, even when you stay within the free monthly usage. Set daily
+   request limits under *APIs & Services → Quotas* to cap spending.
+2. **Set `APP_PASSWORD`.** Without it, anyone who finds the URL can use
+   your Google key.
 3. **Allow the new address on your browser key.** If
    `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is restricted by HTTP referrer, add
-   `https://<your-project>.vercel.app/*`.
+   your app's URL, for example `https://peppes-routing.onrender.com/*`.
 4. **Install it on the phone.**
    - *Android (Chrome or Samsung Internet):* open the URL, sign in, then
      use ⋮ / ☰ → **Add to Home screen** (or **Install app**).
