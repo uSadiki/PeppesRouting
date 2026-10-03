@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import type { OptimizeResponse, Order } from "@/lib/types";
 
@@ -74,7 +74,9 @@ export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
     googleMapsApiKey: apiKey,
   });
 
-  const mapRef = useRef<google.maps.Map | null>(null);
+  // State (not a ref) so the fit-bounds effect re-runs when the map remounts
+  // after each optimize; a ref would leave it pointing at the old instance.
+  const [map, setMap] = useState<google.maps.Map | null>(null);
 
   // One decoded polyline per trip: depot → stops only (no return leg to depot).
   const decodedTrips = useMemo(() => {
@@ -179,8 +181,7 @@ export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
   }, [result]);
 
   useEffect(() => {
-    if (!isLoaded || !mapRef.current) return;
-    const map = mapRef.current;
+    if (!isLoaded || !map) return;
     const bounds = new google.maps.LatLngBounds();
     let added = false;
 
@@ -216,7 +217,7 @@ export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
     if (added) {
       map.fitBounds(bounds, 80);
     }
-  }, [isLoaded, orders, result]);
+  }, [isLoaded, map, orders, result]);
 
   if (loadError) {
     return (
@@ -265,9 +266,8 @@ export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
         mapContainerStyle={containerStyle}
         center={center}
         zoom={13}
-        onLoad={(m) => {
-          mapRef.current = m;
-        }}
+        onLoad={setMap}
+        onUnmount={() => setMap(null)}
         options={{
           styles: darkStyle,
           disableDefaultUI: true,
