@@ -3,7 +3,7 @@
 [![CI](https://github.com/uSadiki/PeppesRouting/actions/workflows/ci.yml/badge.svg)](https://github.com/uSadiki/PeppesRouting/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen?logo=vitest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-98%20passing-brightgreen?logo=vitest&logoColor=white)
 ![Coverage](https://img.shields.io/badge/coverage-97%25%20lines-brightgreen)
 
 A real-time **delivery dispatch and route optimizer** built for a pizza
@@ -25,6 +25,7 @@ gets its own colour on a dark-themed map, with its road-following route drawn in
 - [Architecture](#architecture)
 - [Testing](#testing)
 - [Getting started](#getting-started)
+- [Deploy & use on your phone](#deploy--use-on-your-phone)
 - [API reference](#api-reference)
 - [Project structure](#project-structure)
 - [Design decisions & trade-offs](#design-decisions--trade-offs)
@@ -63,6 +64,8 @@ brute-force solver (see [Testing](#testing)).
 | 🗺️ **Colour-coded map** | Every tour gets its own colour, road-following polyline, and numbered stops (`2.1` = tour 2, stop 1) that match the sidebar. |
 | 🕐 **"Suggested drive-out" time** | For tours with scheduled orders, the app works back from the tightest promise to the latest time the driver can leave. |
 | 💾 **Survives refreshes** | The queue, driver count and delivery promise are saved to `localStorage`, so a reload or a power blip doesn't lose active orders. |
+| 📱 **Works on phones** | Below tablet width, the screen switches to Orders / Map tabs, and the map opens automatically after you optimize. It installs to the home screen (Android and iOS) and runs full-screen like an app. |
+| 🔒 **Password-protected hosting** | Set `APP_PASSWORD` and every page and API call needs a sign-in, which lasts 30 days on that device. |
 | 🛟 **Graceful degradation** | If the Routes API is disabled or unavailable, the app falls back to straight-line (haversine) estimates and shows a warning with a link to enable the API. It doesn't crash. |
 
 ## How the optimizer works
@@ -194,7 +197,7 @@ npm run test:watch     # watch mode
 npm run test:coverage  # with a V8 coverage report (HTML in ./coverage)
 ```
 
-**80 tests · ~97% line coverage** of `lib/` and the API routes, using
+**98 tests · ~97% line coverage** of `lib/`, the API routes and the auth middleware, using
 [Vitest](https://vitest.dev). CI runs the type-check, the tests with coverage,
 and a production build on every push.
 
@@ -205,6 +208,7 @@ and a production build on every push.
 | [`api.test.ts`](tests/api.test.ts) | Runs the real Next.js route handlers end to end against a **fake Google backend** (mocked `fetch`). Covers a full plan, server-side geocoding of orders that lack coordinates, clamping of the delivery promise, **graceful fallback when the Routes API is disabled**, 4xx/5xx error mapping, and that the API key is sent in a header. |
 | [`tour-plan.test.ts`](tests/tour-plan.test.ts) | Sidebar grouping, dropping stale orders, detecting unassigned orders, and working out the drive-out time from the tightest scheduled promise. |
 | [`storage.test.ts`](tests/storage.test.ts) | Persistence round-trips, recovering from corrupted storage, migrating legacy fields, input sanitising, quota errors, and SSR safety (runs in jsdom). |
+| [`auth.test.ts`](tests/auth.test.ts) | The password gate: signed-out pages redirect to login, signed-out API calls get 401 (so nobody can spend the Google quota), old cookies stop working when the password changes, post-login redirects can't point off-site, and wrong passwords are slowed down. |
 | [`colors.test.ts`](tests/colors.test.ts) | The palette is distinct, adjacent tours get different colours, and colours wrap around. |
 
 A few testing techniques used here:
@@ -248,6 +252,7 @@ Open <http://localhost:3000>.
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Browser | Renders the map. **Restrict by HTTP referrer** in production, because it's visible to clients. |
 | `NEXT_PUBLIC_BASE_LOCATION` | Both | Depot address every trip starts and ends at (default `Hellinga 3`). |
 | `NEXT_PUBLIC_REGION` | Both | ISO 3166-1 region bias for geocoding (default `NO`). |
+| `APP_PASSWORD` | Server | Shared sign-in password. Leave it empty locally; **always set it when hosting**. |
 
 ### Scripts
 
@@ -258,6 +263,27 @@ Open <http://localhost:3000>.
 | `npm run typecheck` | Run `tsc --noEmit` in strict mode |
 | `npm test` | Run the test suite |
 | `npm run test:coverage` | Run the tests with a coverage report |
+
+## Deploy & use on your phone
+
+The app is a standard Next.js project, so it deploys to [Vercel](https://vercel.com)'s
+free Hobby plan with no extra configuration.
+
+1. **Turn on billing for your Google Cloud project.** The Maps, Geocoding and
+   Routes APIs won't respond until billing is enabled, even when you stay
+   within the free monthly usage. Set a budget alert to be safe.
+2. **Import the repo on Vercel.** Sign in with GitHub, choose *Add New →
+   Project*, pick this repository, and add the environment variables listed
+   above. Make sure to include `APP_PASSWORD`.
+3. **Allow the new address on your browser key.** If
+   `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is restricted by HTTP referrer, add
+   `https://<your-project>.vercel.app/*`.
+4. **Install it on the phone.**
+   - *Android (Chrome or Samsung Internet):* open the URL, sign in, then
+     use ⋮ / ☰ → **Add to Home screen** (or **Install app**).
+   - *iPhone (Safari):* tap Share → **Add to Home Screen**.
+
+Every push to `main` redeploys automatically.
 
 ## API reference
 
@@ -310,6 +336,9 @@ app/
   api/
     geocode/route.ts     POST /api/geocode:  address → coordinates
     optimize/route.ts    POST /api/optimize: Google I/O + dispatch → routes
+    login/route.ts       POST /api/login: password → 30-day session cookie
+  login/page.tsx         Password sign-in screen (when APP_PASSWORD is set)
+  manifest.ts, icon.tsx  Home-screen install (web app manifest + generated icons)
   layout.tsx
   page.tsx               Dashboard state, persistence, and API orchestration
 components/
@@ -318,11 +347,13 @@ components/
   Sidebar.tsx            Optimize button, delivery-promise selector, warnings
   OrdersList.tsx         Queue grouped by tour, with suggested drive-out times
   MapView.tsx            Dark-styled Google Map, polylines, numbered pins
+middleware.ts            Password gate in front of every page and API route
 lib/
   dispatch.ts            ★ Trip scoring, bitmask set-partition DP, LPT balancing
   optimizer.ts           Haversine, k-means clustering, NN + 2-opt TSP
   tour-plan.ts           Derives sidebar groupings and drive-out hints
   storage.ts             Defensive localStorage persistence
+  auth.ts                Session token, constant-time compare, safe redirects
   colors.ts              High-contrast tour palette
   types.ts               Shared request/response types
 tests/                   Vitest suites and shared fixtures

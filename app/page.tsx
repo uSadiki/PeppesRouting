@@ -40,6 +40,8 @@ export default function HomePage() {
   const [result, setResult] = useState<OptimizeResponse | null>(null);
   /** Bumped on each successful optimize so map overlays get fresh React keys (Polylines don't always clear). */
   const [optimizeRunId, setOptimizeRunId] = useState(0);
+  /** Phones show one panel at a time; ignored at md+ where both are side by side. */
+  const [mobileView, setMobileView] = useState<"orders" | "map">("orders");
 
   // Hydrate from localStorage on mount.
   useEffect(() => {
@@ -204,6 +206,7 @@ export default function HomePage() {
       }
       setOptimizeRunId((id) => id + 1);
       setResult(data as OptimizeResponse);
+      setMobileView("map");
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : "Network error.");
     } finally {
@@ -212,7 +215,7 @@ export default function HomePage() {
   }, [drivers, maxDeliveryMinutes, orders]);
 
   return (
-    <main className="h-screen w-screen flex flex-col overflow-hidden">
+    <main className="h-dvh w-screen flex flex-col overflow-hidden">
       <TopBar
         drivers={drivers}
         refocusToken={refocusToken}
@@ -220,18 +223,23 @@ export default function HomePage() {
         onChangeDrivers={handleChangeDrivers}
       />
 
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-        <Sidebar
-          orders={orders}
-          onRemoveOrder={handleRemoveOrder}
-          onClearOrders={handleClearOrders}
-          onOptimize={handleOptimize}
-          optimizing={optimizing}
-          optimizeError={optimizeError}
-          result={result}
-          maxDeliveryMinutes={maxDeliveryMinutes}
-          onMaxDeliveryChange={handleMaxDeliveryChange}
-        />
+      <div className="flex-1 min-h-0 relative flex overflow-hidden">
+        {/* On phones the sidebar overlays the map (kept mounted so it keeps its size). */}
+        <div
+          className={`${mobileView === "orders" ? "flex" : "hidden"} absolute inset-0 z-10 md:static md:z-auto md:flex`}
+        >
+          <Sidebar
+            orders={orders}
+            onRemoveOrder={handleRemoveOrder}
+            onClearOrders={handleClearOrders}
+            onOptimize={handleOptimize}
+            optimizing={optimizing}
+            optimizeError={optimizeError}
+            result={result}
+            maxDeliveryMinutes={maxDeliveryMinutes}
+            onMaxDeliveryChange={handleMaxDeliveryChange}
+          />
+        </div>
         <div className="flex-1 relative bg-peppes-dark min-h-0">
           {PUBLIC_MAPS_KEY ? (
             <MapView
@@ -255,6 +263,21 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      <nav className="md:hidden shrink-0 grid grid-cols-2 border-t border-peppes-border bg-peppes-dark pb-[env(safe-area-inset-bottom)]">
+        {(["orders", "map"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setMobileView(v)}
+            className={`py-3 text-sm font-semibold transition ${
+              mobileView === v ? "text-white border-t-2 border-peppes-red -mt-px" : "text-peppes-subtle"
+            }`}
+          >
+            {v === "orders" ? `Orders (${orders.length})` : "Map"}
+          </button>
+        ))}
+      </nav>
     </main>
   );
 }
