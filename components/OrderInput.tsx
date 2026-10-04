@@ -47,15 +47,16 @@ export function OrderInput({ onSubmit, refocusToken, compact = false }: Props) {
     setValue("");
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submit();
-    }
+  // A real <form> rather than an Enter-key listener: phone keyboards with
+  // predictive text (Samsung Keyboard, Gboard) don't report a normal "Enter"
+  // keydown, but their Go/Enter key always submits the surrounding form.
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    submit();
   }
 
   return (
-    <div className={compact ? "space-y-0" : "space-y-2"}>
+    <form onSubmit={handleSubmit} className={compact ? "space-y-0" : "space-y-2"}>
       {!compact && (
         <label className="text-xs uppercase tracking-wider text-peppes-subtle font-medium">
           Add order
@@ -101,11 +102,22 @@ export function OrderInput({ onSubmit, refocusToken, compact = false }: Props) {
           value={value}
           placeholder={compact ? "Address, Enter to add…" : "Address…"}
           onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
+          enterKeyHint="go"
           className={`min-w-0 flex-1 w-full bg-peppes-panel border border-peppes-border rounded-lg px-3 ${
             compact ? "py-2 text-[14px]" : "py-2.5 text-[15px]"
           } outline-none focus:border-peppes-red focus:shadow-glow transition placeholder:text-peppes-subtle`}
         />
+        <button
+          type="submit"
+          disabled={!value.trim()}
+          // Keep the keyboard open (and the input focused) when tapped on a phone.
+          onMouseDown={(e) => e.preventDefault()}
+          className={`shrink-0 rounded-lg bg-peppes-red px-4 ${
+            compact ? "py-2 text-[14px]" : "py-2.5 text-[15px]"
+          } font-semibold text-white transition disabled:opacity-40`}
+        >
+          Add
+        </button>
       </div>
       {!compact && (
         <p className="text-[11px] text-peppes-subtle">
@@ -116,6 +128,6 @@ export function OrderInput({ onSubmit, refocusToken, compact = false }: Props) {
           .
         </p>
       )}
-    </div>
+    </form>
   );
 }
