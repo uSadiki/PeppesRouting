@@ -2,13 +2,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadDrivers,
+  loadManualTrips,
   loadMaxDeliveryMinutes,
   loadOrders,
+  loadPlanningMode,
   saveDrivers,
+  saveManualTrips,
   saveMaxDeliveryMinutes,
   saveOrders,
+  savePlanningMode,
 } from "@/lib/storage";
-import type { Order } from "@/lib/types";
+import type { ManualTrip, Order } from "@/lib/types";
 
 beforeEach(() => window.localStorage.clear());
 afterEach(() => {
@@ -110,13 +114,73 @@ describe("max delivery minutes persistence", () => {
   });
 });
 
+describe("planning mode persistence", () => {
+  it("defaults to the optimizer", () => {
+    expect(loadPlanningMode()).toBe("auto");
+  });
+
+  it("remembers manual mode", () => {
+    savePlanningMode("manual");
+    expect(loadPlanningMode()).toBe("manual");
+  });
+
+  it("treats unknown values as auto", () => {
+    window.localStorage.setItem("peppes:mode", "chaos");
+    expect(loadPlanningMode()).toBe("auto");
+  });
+});
+
+describe("manual trips persistence", () => {
+  const leg = { durationSeconds: 300, distanceMeters: 2500, polyline: "abc" };
+  const trips: ManualTrip[] = [
+    { id: "t1", orderIds: ["a", "b"], colorIndex: 0, legs: [leg, leg, leg] },
+    { id: "t2", orderIds: ["c"], colorIndex: 3, legs: null },
+  ];
+
+  it("round-trips saved trips, including their routes", () => {
+    saveManualTrips(trips);
+    expect(loadManualTrips()).toEqual(trips);
+  });
+
+  it("returns no trips for empty or corrupted storage", () => {
+    expect(loadManualTrips()).toEqual([]);
+    window.localStorage.setItem("peppes:manualTrips", "{oops");
+    expect(loadManualTrips()).toEqual([]);
+  });
+
+  it("skips malformed trips and duplicate trip numbers", () => {
+    window.localStorage.setItem(
+      "peppes:manualTrips",
+      JSON.stringify([
+        { id: "ok", orderIds: ["a"], colorIndex: 1, legs: null },
+        { id: "dup", orderIds: ["b"], colorIndex: 1, legs: null },
+        { id: "empty", orderIds: [], colorIndex: 2, legs: null },
+        { id: "neg", orderIds: ["c"], colorIndex: -1, legs: null },
+        { id: 7, orderIds: ["d"], colorIndex: 4, legs: null },
+      ]),
+    );
+    expect(loadManualTrips().map((t) => t.id)).toEqual(["ok"]);
+  });
+
+  it("discards a stored route that doesn't match the trip so it gets recomputed", () => {
+    window.localStorage.setItem(
+      "peppes:manualTrips",
+      JSON.stringify([{ id: "t", orderIds: ["a", "b"], colorIndex: 0, legs: [leg] }]),
+    );
+    expect(loadManualTrips()[0].legs).toBeNull();
+  });
+});
+
 describe("server-side rendering", () => {
   it("returns safe defaults and never touches storage when window is undefined", () => {
     vi.stubGlobal("window", undefined);
     expect(loadOrders()).toEqual([]);
     expect(loadDrivers()).toBe(1);
     expect(loadMaxDeliveryMinutes()).toBe(40);
+    expect(loadPlanningMode()).toBe("auto");
+    expect(loadManualTrips()).toEqual([]);
     expect(() => saveOrders([])).not.toThrow();
+    expect(() => saveManualTrips([])).not.toThrow();
     expect(() => saveDrivers(3)).not.toThrow();
   });
 });

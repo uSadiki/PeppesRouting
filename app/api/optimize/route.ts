@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { haversineMeters } from "@/lib/optimizer";
 import { dispatch, type DispatchOrderTiming } from "@/lib/dispatch";
 import { colorForTour } from "@/lib/colors";
+import { geocodeAddress } from "@/lib/google";
 import type {
   DriverRoute,
   LatLng,
@@ -74,34 +75,6 @@ function buildDispatchOrderTiming(
 }
 
 // ---------- Google API helpers ----------
-
-async function geocodeAddress(
-  address: string,
-  apiKey: string,
-  region?: string,
-): Promise<{ location: LatLng; formattedAddress: string }> {
-  const params = new URLSearchParams({ address, key: apiKey });
-  if (region) params.set("region", region.toLowerCase());
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
-  const r = await fetch(url, { cache: "no-store" });
-  const data = (await r.json()) as {
-    status: string;
-    error_message?: string;
-    results: Array<{
-      formatted_address: string;
-      geometry: { location: { lat: number; lng: number } };
-    }>;
-  };
-  if (data.status !== "OK" || !data.results.length) {
-    throw new Error(
-      data.error_message || `Geocoding failed for "${address}" (${data.status}).`,
-    );
-  }
-  return {
-    location: data.results[0].geometry.location,
-    formattedAddress: data.results[0].formatted_address,
-  };
-}
 
 interface MatrixCell {
   durationSeconds: number;

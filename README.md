@@ -3,7 +3,7 @@
 [![CI](https://github.com/uSadiki/PeppesRouting/actions/workflows/ci.yml/badge.svg)](https://github.com/uSadiki/PeppesRouting/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-98%20passing-brightgreen?logo=vitest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-131%20passing-brightgreen?logo=vitest&logoColor=white)
 ![Coverage](https://img.shields.io/badge/coverage-97%25%20lines-brightgreen)
 
 A real-time **delivery dispatch and route optimizer** built for a pizza
@@ -58,6 +58,7 @@ brute-force solver (see [Testing](#testing)).
 | ⌨️ **Keyboard-first entry** | The address field auto-focuses and re-focuses after every Enter, so staff can enter a stack of tickets without touching the mouse. |
 | 📍 **Instant geocoding** | Each address is geocoded as it's added, and its pin shows up before you optimize. Failed lookups are flagged inline. |
 | ⏱️ **ASAP & scheduled orders** | ASAP orders carry a delivery promise (40 / 50 / 60 min for normal, busy and very busy shifts). Scheduled orders aim for their time slot, give or take 15 minutes. |
+| 👆 **Manual mode** | Prefer to plan it yourself? Tap delivery dots on the map in the order you want them driven. The live road route lights up after each tap, with minutes per stop, the round-trip time and the coldest pizza, so you can spot a stop on the way. Save it as a trip; trips can be edited, ungrouped, or marked *Sent out* when the driver leaves. |
 | 🚗 **Multi-driver, multi-trip dispatch** | Choose 1–99 drivers. Orders are batched into trips of up to 3 and balanced across drivers. |
 | 🌡️ **Freshness-aware** | The optimizer never plans a multi-stop trip where a pizza would spend more than 20 minutes in the bag. |
 | 🚦 **Live traffic** | Travel times come from Google's `computeRouteMatrix` with `TRAFFIC_AWARE` routing. |
@@ -197,7 +198,7 @@ npm run test:watch     # watch mode
 npm run test:coverage  # with a V8 coverage report (HTML in ./coverage)
 ```
 
-**98 tests · ~97% line coverage** of `lib/`, the API routes and the auth middleware, using
+**131 tests** covering `lib/`, the API routes and the auth middleware, using
 [Vitest](https://vitest.dev). CI runs the type-check, the tests with coverage,
 and a production build on every push.
 
@@ -209,6 +210,8 @@ and a production build on every push.
 | [`tour-plan.test.ts`](tests/tour-plan.test.ts) | Sidebar grouping, dropping stale orders, detecting unassigned orders, and working out the drive-out time from the tightest scheduled promise. |
 | [`storage.test.ts`](tests/storage.test.ts) | Persistence round-trips, recovering from corrupted storage, migrating legacy fields, input sanitising, quota errors, and SSR safety (runs in jsdom). |
 | [`auth.test.ts`](tests/auth.test.ts) | The password gate: signed-out pages redirect to login, signed-out API calls get 401 (so nobody can spend the Google quota), old cookies stop working when the password changes, post-login redirects can't point off-site, and wrong passwords are slowed down. |
+| [`manual-trips.test.ts`](tests/manual-trips.test.ts) | Manual-mode logic: trip timings (handover at each door + drive back), tap-to-add and tap-to-remove, stable trip numbers, pruning delivered orders, and Google's reference polyline. |
+| [`route-api.test.ts`](tests/route-api.test.ts) | `/api/route`: depot → stops in tapped order → depot with live traffic, depot looked up only once, straight-line fallback with a warning, and input validation. |
 | [`colors.test.ts`](tests/colors.test.ts) | The palette is distinct, adjacent tours get different colours, and colours wrap around. |
 
 A few testing techniques used here:
@@ -311,6 +314,22 @@ Every push to `main` redeploys automatically.
 { "ok": false, "error": "No match for that address." }
 ```
 
+### `POST /api/route`
+
+Used by manual mode on every tap. Send the stops in visit order; the server
+adds the depot at both ends and returns one leg per hop (the last leg is the
+drive back), each with traffic-aware duration, distance and an encoded road
+polyline. If the Routes API fails, it returns straight-line estimates plus a
+`warning` instead of an error.
+
+```jsonc
+// request
+{ "stops": [{ "lat": 59.8738, "lng": 10.8105 }, { "lat": 59.9152, "lng": 10.7698 }] }
+// 200 OK
+{ "base": { "address": "Hellinga 3, 1151 Oslo, Norway", "location": { "lat": 59.871, "lng": 10.808 } },
+  "legs": [{ "durationSeconds": 62, "distanceMeters": 358, "polyline": "…" }, …] }
+```
+
 ### `POST /api/optimize`
 
 ```jsonc
@@ -348,6 +367,7 @@ app/
     geocode/route.ts     POST /api/geocode:  address → coordinates
     optimize/route.ts    POST /api/optimize: Google I/O + dispatch → routes
     login/route.ts       POST /api/login: password → 30-day session cookie
+    route/route.ts       POST /api/route: road route for one hand-built trip
   login/page.tsx         Password sign-in screen (when APP_PASSWORD is set)
   manifest.ts, icon.tsx  Home-screen install (web app manifest + generated icons)
   layout.tsx
@@ -358,11 +378,15 @@ components/
   Sidebar.tsx            Optimize button, delivery-promise selector, warnings
   OrdersList.tsx         Queue grouped by tour, with suggested drive-out times
   MapView.tsx            Dark-styled Google Map, polylines, numbered pins
+  ManualMapView.tsx      Manual mode: tap-to-build trips with a live route
 middleware.ts            Password gate in front of every page and API route
 lib/
   dispatch.ts            ★ Trip scoring, bitmask set-partition DP, LPT balancing
   optimizer.ts           Haversine, k-means clustering, NN + 2-opt TSP
   tour-plan.ts           Derives sidebar groupings and drive-out hints
+  manual-trips.ts        Manual-mode trip timing, numbering and pruning
+  use-manual-trips.ts    React state for manual mode (builder, saved trips, routing)
+  google.ts              Shared Geocoding / Routes API calls
   storage.ts             Defensive localStorage persistence
   auth.ts                Session token, constant-time compare, safe redirects
   colors.ts              High-contrast tour palette

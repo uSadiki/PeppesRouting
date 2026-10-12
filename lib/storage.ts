@@ -1,8 +1,10 @@
-import type { Order } from "./types";
+import type { ManualTrip, Order, PlanningMode, TripLeg } from "./types";
 
 const ORDERS_KEY = "peppes:orders";
 const DRIVERS_KEY = "peppes:drivers";
 const MAX_DELIVERY_KEY = "peppes:maxDeliveryMinutes";
+const MODE_KEY = "peppes:mode";
+const MANUAL_TRIPS_KEY = "peppes:manualTrips";
 
 export function loadOrders(): Order[] {
   if (typeof window === "undefined") return [];
@@ -74,6 +76,80 @@ export function saveMaxDeliveryMinutes(n: number): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(MAX_DELIVERY_KEY, String(n));
+  } catch {
+    // best-effort
+  }
+}
+
+export function loadPlanningMode(): PlanningMode {
+  if (typeof window === "undefined") return "auto";
+  try {
+    return window.localStorage.getItem(MODE_KEY) === "manual" ? "manual" : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+export function savePlanningMode(mode: PlanningMode): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // best-effort
+  }
+}
+
+function isTripLeg(v: unknown): v is TripLeg {
+  const l = v as TripLeg;
+  return (
+    !!l &&
+    Number.isFinite(l.durationSeconds) &&
+    Number.isFinite(l.distanceMeters) &&
+    typeof l.polyline === "string"
+  );
+}
+
+export function loadManualTrips(): ManualTrip[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MANUAL_TRIPS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const seenColors = new Set<number>();
+    const trips: ManualTrip[] = [];
+    for (const t of parsed) {
+      if (
+        !t ||
+        typeof t.id !== "string" ||
+        !Array.isArray(t.orderIds) ||
+        t.orderIds.length === 0 ||
+        !t.orderIds.every((id: unknown) => typeof id === "string") ||
+        !Number.isInteger(t.colorIndex) ||
+        t.colorIndex < 0 ||
+        seenColors.has(t.colorIndex)
+      ) {
+        continue;
+      }
+      seenColors.add(t.colorIndex);
+      const legs =
+        Array.isArray(t.legs) &&
+        t.legs.length === t.orderIds.length + 1 &&
+        t.legs.every(isTripLeg)
+          ? (t.legs as TripLeg[])
+          : null; // recomputed by the app
+      trips.push({ id: t.id, orderIds: t.orderIds, colorIndex: t.colorIndex, legs });
+    }
+    return trips;
+  } catch {
+    return [];
+  }
+}
+
+export function saveManualTrips(trips: ManualTrip[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MANUAL_TRIPS_KEY, JSON.stringify(trips));
   } catch {
     // best-effort
   }

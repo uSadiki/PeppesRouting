@@ -4,29 +4,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TopBar } from "@/components/TopBar";
 import { Sidebar } from "@/components/Sidebar";
 import { MapView } from "@/components/MapView";
+import { ManualMapView } from "@/components/ManualMapView";
+import { useManualTrips } from "@/lib/use-manual-trips";
+import { makeId } from "@/lib/ids";
 import {
   loadDrivers,
   loadMaxDeliveryMinutes,
   loadOrders,
+  loadPlanningMode,
   saveDrivers,
   saveMaxDeliveryMinutes,
   saveOrders,
+  savePlanningMode,
 } from "@/lib/storage";
 import type {
   AddOrderPayload,
   OptimizeResponse,
   Order,
+  PlanningMode,
 } from "@/lib/types";
 
 const REGION = process.env.NEXT_PUBLIC_REGION || "NO";
 const PUBLIC_MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-
-function makeId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 export default function HomePage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -42,12 +41,15 @@ export default function HomePage() {
   const [optimizeRunId, setOptimizeRunId] = useState(0);
   /** Phones show one panel at a time; ignored at md+ where both are side by side. */
   const [mobileView, setMobileView] = useState<"orders" | "map">("orders");
+  const [mode, setMode] = useState<PlanningMode>("auto");
+  const manual = useManualTrips(orders, mode === "manual", hydrated);
 
   // Hydrate from localStorage on mount.
   useEffect(() => {
     setOrders(loadOrders());
     setDrivers(loadDrivers());
     setMaxDeliveryMinutes(loadMaxDeliveryMinutes());
+    setMode(loadPlanningMode());
     setHydrated(true);
   }, []);
 
@@ -61,6 +63,9 @@ export default function HomePage() {
   useEffect(() => {
     if (hydrated) saveMaxDeliveryMinutes(maxDeliveryMinutes);
   }, [maxDeliveryMinutes, hydrated]);
+  useEffect(() => {
+    if (hydrated) savePlanningMode(mode);
+  }, [mode, hydrated]);
 
   // Geocode any orders that don't yet have coords.
   const inFlight = useRef<Set<string>>(new Set());
@@ -153,6 +158,25 @@ export default function HomePage() {
     setRefocusToken((t) => t + 1);
   }, []);
 
+  const handleModeChange = useCallback((m: PlanningMode) => {
+    setMode(m);
+    // Manual planning happens on the map, so take phones straight there.
+    if (m === "manual") setMobileView("map");
+  }, []);
+
+  /** Driver left with a manual trip: its orders leave the queue (the trip goes with them). */
+  const { trips: manualTrips } = manual;
+  const handleSendOutTrip = useCallback(
+    (colorIndex: number) => {
+      const trip = manualTrips.find((t) => t.colorIndex === colorIndex);
+      if (!trip) return;
+      const gone = new Set(trip.orderIds);
+      setOrders((prev) => prev.filter((o) => !gone.has(o.id)));
+      setResult(null);
+    },
+    [manualTrips],
+  );
+
   const handleChangeDrivers = useCallback((n: number) => {
     setDrivers(n);
     setResult(null);
@@ -238,10 +262,17 @@ export default function HomePage() {
             result={result}
             maxDeliveryMinutes={maxDeliveryMinutes}
             onMaxDeliveryChange={handleMaxDeliveryChange}
+            mode={mode}
+            onModeChange={handleModeChange}
+            manual={manual}
+            onSendOutTrip={handleSendOutTrip}
+            onOpenMap={() => setMobileView("map")}
           />
         </div>
         <div className="flex-1 relative bg-peppes-dark min-h-0">
-          {PUBLIC_MAPS_KEY ? (
+          {PUBLIC_MAPS_KEY && mode === "manual" ? (
+            <ManualMapView apiKey={PUBLIC_MAPS_KEY} orders={orders} manual={manual} />
+          ) : PUBLIC_MAPS_KEY ? (
             <MapView
               apiKey={PUBLIC_MAPS_KEY}
               orders={orders}

@@ -114,3 +114,40 @@ export interface OptimizeResponse {
   /** Non-fatal warnings (e.g. a Google API was disabled and we fell back). */
   warnings?: string[];
 }
+
+// ---------- Manual trip building ----------
+
+/** "auto" = optimizer plans everything; "manual" = staff tap stops on the map. */
+export type PlanningMode = "auto" | "manual";
+
+/** One driven hop of a hand-built trip. */
+export interface TripLeg {
+  durationSeconds: number;
+  distanceMeters: number;
+  /** Encoded road polyline for this hop ("" when only an estimate is available). */
+  polyline: string;
+}
+
+export interface TripRouteRequestBody {
+  /** Stops in visit order; the depot start and return are added by the server. */
+  stops: LatLng[];
+}
+
+export interface TripRouteResponse {
+  base: { address: string; location: LatLng };
+  /** `stops.length + 1` legs: depot → stop 1 → … → last stop → depot. */
+  legs: TripLeg[];
+  /** Set when the road route was unavailable and legs are straight-line estimates. */
+  warning?: string;
+}
+
+/** A trip the dispatcher assembled by hand in manual mode. */
+export interface ManualTrip {
+  id: string;
+  /** Order ids in delivery sequence. */
+  orderIds: string[];
+  /** Stable trip number − 1; also picks the trip's colour. */
+  colorIndex: number;
+  /** Road route for `orderIds`; null while (re)computing after the stops changed. */
+  legs: TripLeg[] | null;
+}

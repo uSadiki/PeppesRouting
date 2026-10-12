@@ -1,6 +1,7 @@
 "use client";
 
-import type { OptimizeResponse, Order } from "@/lib/types";
+import type { ReactNode } from "react";
+import type { OptimizeResponse, Order, PlanningMode } from "@/lib/types";
 import {
   type TourPlanGroup,
   suggestedDriveOutLabel,
@@ -14,6 +15,10 @@ interface Props {
   tourPlan?: { groups: TourPlanGroup[]; unassignedIds: string[] } | null;
   /** Last successful optimize result — used for suggested drive-out on scheduled tours. */
   optimizeResult?: OptimizeResponse | null;
+  /** Manual mode groups orders into hand-built trips instead of optimizer tours. */
+  mode?: PlanningMode;
+  /** Extra header content per group (manual mode: trip time and Edit/Ungroup/Sent out). */
+  groupExtras?: (group: TourPlanGroup) => { summary?: string; actions?: ReactNode };
 }
 
 function scheduleHint(o: Order): string | null {
@@ -104,9 +109,14 @@ export function OrdersList({
   onClear,
   tourPlan,
   optimizeResult,
+  mode = "auto",
+  groupExtras,
 }: Props) {
+  const manual = mode === "manual";
   const showGrouped =
     tourPlan != null && tourPlan.groups.some((g) => g.orderIds.length > 0);
+  /** Queue position, matching the numbered dots on the manual-mode map. */
+  const queueLabel = (o: Order) => String(orders.indexOf(o) + 1).padStart(2, "0");
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -132,8 +142,9 @@ export function OrdersList({
 
       {showGrouped && (
         <p className="text-[10px] text-peppes-subtle mb-2 leading-snug">
-          Batched tours follow the last plan — same colors as on the map. New
-          addresses stay grey on the map until you optimize again.
+          {manual
+            ? "Saved trips use the same colours as the map. Tap grey dots on the map to build the next trip."
+            : "Batched tours follow the last plan — same colors as on the map. New addresses stay grey on the map until you optimize again."}
         </p>
       )}
 
@@ -146,9 +157,10 @@ export function OrdersList({
           <div className="space-y-3">
             {tourPlan.groups.map((g) => {
               const driveOut =
-                optimizeResult != null
+                !manual && optimizeResult != null
                   ? suggestedDriveOutLabel(optimizeResult, g.tourIndex, orders)
                   : null;
+              const extras = groupExtras?.(g);
               return (
                 <div
                   key={g.tourIndex}
@@ -164,11 +176,15 @@ export function OrdersList({
                       style={{ backgroundColor: g.color }}
                     />
                     <span className="text-[11px] font-bold text-white tracking-wide">
-                      Tour {g.tourIndex + 1}
+                      {manual ? "Trip" : "Tour"} {g.tourIndex + 1}
                     </span>
                     <span className="text-[10px] text-peppes-subtle">
-                      {g.orderIds.length} stop{g.orderIds.length === 1 ? "" : "s"} · same run
+                      {g.orderIds.length} stop{g.orderIds.length === 1 ? "" : "s"} ·{" "}
+                      {extras?.summary ?? "same run"}
                     </span>
+                    {extras?.actions ? (
+                      <span className="ml-auto flex items-center gap-1">{extras.actions}</span>
+                    ) : null}
                     {driveOut ? (
                       <span
                         className="text-[10px] text-peppes-subtle ml-auto min-w-[12rem] text-right leading-snug"
@@ -203,7 +219,7 @@ export function OrdersList({
             {tourPlan.unassignedIds.length > 0 && (
               <div className="rounded-xl border border-dashed border-peppes-border bg-peppes-panel/20 p-2">
                 <div className="text-[10px] uppercase tracking-wider text-amber-200/90 font-medium px-1 mb-1.5">
-                  Not in last plan — optimize again
+                  {manual ? "Not in a trip yet" : "Not in last plan — optimize again"}
                 </div>
                 <ul className="space-y-1">
                   {tourPlan.unassignedIds.map((oid) => {
@@ -213,7 +229,7 @@ export function OrdersList({
                       <OrderRow
                         key={oid}
                         o={o}
-                        indexLabel="—"
+                        indexLabel={manual ? queueLabel(o) : "—"}
                         onRemove={onRemove}
                       />
                     );

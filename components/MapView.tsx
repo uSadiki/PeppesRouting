@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import type { OptimizeResponse, Order } from "@/lib/types";
+import { FALLBACK_CENTER, darkMapStyle, decodePolyline } from "@/lib/map-utils";
 
 interface Props {
   apiKey: string;
@@ -13,60 +14,6 @@ interface Props {
 }
 
 const containerStyle = { width: "100%", height: "100%" };
-
-const FALLBACK_CENTER = { lat: 59.9139, lng: 10.7522 }; // Oslo
-
-const darkStyle: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#16161b" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#16161b" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#9a9aa8" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#26262e" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#22232a" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1a1b21" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2c2d36" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0b0c10" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3a3b45" }] },
-];
-
-/**
- * Decodes an encoded polyline string into an array of lat/lng points.
- * Implementation of Google's polyline algorithm.
- * https://developers.google.com/maps/documentation/utilities/polylinealgorithm
- */
-function decodePolyline(encoded: string): { lat: number; lng: number }[] {
-  const points: { lat: number; lng: number }[] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let b: number;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
-    lat += dlat;
-
-    result = 0;
-    shift = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
-    lng += dlng;
-
-    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
-  }
-  return points;
-}
 
 export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -269,7 +216,7 @@ export function MapView({ apiKey, orders, result, optimizeRunId }: Props) {
         onLoad={setMap}
         onUnmount={() => setMap(null)}
         options={{
-          styles: darkStyle,
+          styles: darkMapStyle,
           disableDefaultUI: true,
           zoomControl: true,
           gestureHandling: "greedy",
